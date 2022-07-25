@@ -1,0 +1,14 @@
+[context.production]
+  environment = { AZURE_PAT = "this is a very important secret" }
+
+[[edge_functions]]
+path = "/test"
+function = "hello"
+
+[[edge_functions]]
+  path = "/fetch-joke"
+  function = "proxy-requests"
+
+[[edge_functions]]
+  path = "/fetch-azure-badge"
+  function = "build-badge"
