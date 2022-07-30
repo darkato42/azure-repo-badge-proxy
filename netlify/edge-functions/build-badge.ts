@@ -1,28 +1,28 @@
 import { Context } from "netlify:edge";
 
-export default async (request: Request, context: Context) => {
-
+function getAuthHeader(): (string) {
     // Convert PAT for Basic Auth
     const pat = Deno.env.get("AZURE_PAT");
     if(!pat){
         console.log("No PAT found. Please add an environment variable called AZURE_PAT");
-        return;
+        return "";
     }
 
     const base64PAT = btoa(":" + pat);
-    
+    return "Basic " + base64PAT;
+}
+
+export default async (request: Request, context: Context) => {
     // Extract query params from request url
+    // e.g. host/fetch-azure-badge/org/project/42?name=MyProject&buildNumber=*alpha*&tagFilters=alpha
     const requestUri = new URL(request.url);
     const pathRegex = /\/fetch-azure-badge\/(.+?)\/(.+?)\/(\d+)/;
     const match = requestUri.pathname.match(pathRegex);
     if (!match) {
-        console.log('no match');
+        console.log("no match of build id in request url");
         return;
     }
-    const org = match[1];
-    const project = match[2];
-    const buildDefinitionId = match[3];
-
+    const [, org, project, buildDefinitionId] = match;
     const params = new URLSearchParams(requestUri.search);
     const name = params.get('name');
     const buildNumberFilter = params.get('buildNumber');
@@ -39,23 +39,24 @@ export default async (request: Request, context: Context) => {
 
     console.log("urlBuildInfo: " + urlBuildInfo);
 
-    const respBuildInfo = await fetch(urlBuildInfo, {
+    const authHeader = getAuthHeader();
+    const responseBuildInfo = await fetch(urlBuildInfo, {
         "headers": {
-            "Authorization": "Basic " + base64PAT,
+            "Authorization": authHeader,
             "Accept": "application/json"
         }
     });
     
-    const buildInfoJson = await respBuildInfo.json();
+    const buildInfoJson = await responseBuildInfo.json();
     const semVer = buildInfoJson.value[0].buildNumber;
     const sourceBranch = buildInfoJson.value[0].sourceBranch;
 
-    // Fetch the badge
+    // Fetch the badge given branch and label
     const urlBuildBadge = `https://dev.azure.com/${org}/${project}/_apis/build/status/${buildDefinitionId}?branchName=${sourceBranch}&label=${name} ${semVer}`;
     console.log("urlBuildBadge: " + urlBuildBadge);
     const respBuildBadge = await fetch(urlBuildBadge, {
         "headers": {
-            "Authorization": "Basic " + base64PAT
+            "Authorization": authHeader
         }
     });
     return respBuildBadge;
